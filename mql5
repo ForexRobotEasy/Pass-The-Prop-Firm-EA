@@ -1,0 +1,102 @@
+mql5
+//+------------------------------------------------------------------+
+//|                                                       Pass The Prop Firm EA|
+//|                               Copyright © 2021 Forex Robot Easy Team|
+//|                                        https://www.forexroboteasy.com|
+//+------------------------------------------------------------------+
+#property version   '1.00'
+#property strict
+#property indicator_separate_window
+#property indicator_buffers 2
+#property indicator_color1 Red
+#property indicator_color2 Green
+
+input double dailyDrawdown = 0.02; // Daily maximum drawdown percentage
+input double totalDrawdown = 0.05; // Total maximum drawdown percentage
+input double profitTarget = 100.0; // Profit target in account currency
+
+double lotSize = 0.01; // Initial lot size
+double accountBalance = AccountBalance(); // Current account balance
+double accountEquity = AccountEquity(); // Current account equity
+double accountCurrency = AccountCurrency(); // Account currency
+
+double drawdownPips = 0.0; // Current drawdown in pips
+double maxDrawdownPips = 0.0; // Maximum drawdown in pips
+
+int OnInit()
+{
+    SetIndexStyle(0, DRAW_LINE);
+    SetIndexBuffer(0, Buffer1);
+    SetIndexStyle(1, DRAW_LINE);
+    SetIndexBuffer(1, Buffer2);
+    return(INIT_SUCCEEDED);
+}
+
+void OnTick()
+{
+    double currentPrice = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+    
+    if (accountEquity < accountBalance * (1 - totalDrawdown))
+    {
+        CloseAllPositions();
+        Print('Total drawdown exceeded. Closing all positions.');
+    }
+    
+    if (accountEquity < accountBalance * (1 - dailyDrawdown))
+    {
+        CloseAllPositions();
+        Print('Daily drawdown exceeded. Closing all positions.');
+    }
+    
+    if (accountEquity >= accountBalance + profitTarget)
+    {
+        CloseAllPositions();
+        Print('Profit target reached. Closing all positions.');
+    }
+    
+    CalculateDrawdown(currentPrice);
+}
+
+void CalculateDrawdown(double price)
+{
+    double currentProfit = 0.0;
+    
+    for (int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        if (PositionSelectByTicket(i) && PositionGetInteger(POSITION_TYPE) <= POSITION_TYPE_SELL)
+        {
+            double entryPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+            double profit = (price - entryPrice) * PositionGetDouble(POSITION_VOLUME) * _Point;
+            
+            if (profit > currentProfit)
+                currentProfit = profit;
+                
+            double drawdown = currentProfit - profit;
+            
+            if (drawdown > maxDrawdownPips)
+                maxDrawdownPips = drawdown;
+        }
+    }
+    
+    drawdownPips = maxDrawdownPips;
+    
+    PlotIndicatorBuffers();
+}
+
+void CloseAllPositions()
+{
+    for (int i = PositionsTotal() - 1; i >= 0; i--)
+    {
+        if (PositionSelectByTicket(i))
+            PositionClose(PositionGetTicket());
+    }
+}
+
+void PlotIndicatorBuffers()
+{
+    ArrayResize(Buffer1, 1);
+    Buffer1[0] = drawdownPips;
+    
+    ArrayResize(Buffer2, 1);
+    Buffer2[0] = maxDrawdownPips;
+}
